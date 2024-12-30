@@ -1,4 +1,5 @@
-
+def call(Map config = [:]) {
+    
 properties([
     parameters([
         string(name: 'GIT_REPO_URL', defaultValue: 'https://github.com/zazathomas/Jenkins-for-DevSecOps.git', description: 'Repository containing the Dockerfile'),
@@ -82,4 +83,5 @@ podTemplate(
             echo 'Pipeline finished!'
         }
     }  // End of node
+}
 }
