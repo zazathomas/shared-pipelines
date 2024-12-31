@@ -16,35 +16,37 @@ containers: [
 ]
 ){
     node(POD_LABEL) {
-        try {
+        dir('workspace') {
+            try {
 
-            stage("Copy Image to Registry"){
-                container('crane'){
-                    echo "Logging into ${registry} registry..."
-                    // Use Jenkins credentials to create `config.json`
-                    withCredentials([usernamePassword(credentialsId: credentialsId, usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                stage("Copy Image to Registry"){
+                    container('crane'){
+                        echo "Logging into ${registry} registry..."
+                        // Use Jenkins credentials to create `config.json`
+                        withCredentials([usernamePassword(credentialsId: credentialsId, usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                            sh """
+                            echo ${PASSWORD} | crane auth login ${registry} -u ${USERNAME} --password-stdin
+                            """
+                        }  // End of withCredentials
+                        echo "Copying Image to ${registry} registry..."
                         sh """
-                        echo ${PASSWORD} | crane auth login ${registry} -u ${USERNAME} --password-stdin
+                        crane copy ${source_registry}/${source_image}:${sourceTag} ${registry}/${destination_repository}/${source_image}:${imageTag}
                         """
-                    }  // End of withCredentials
-                    echo "Copying Image to ${registry} registry..."
-                    sh """
-                    crane copy ${source_registry}/${source_image}:${sourceTag} ${registry}/${destination_repository}/${source_image}:${imageTag}
-                    """
+                    }
                 }
             }
-        }
 
-        catch (Exception e) {
-        // Handle failure case (similar to `post { failure { } }` in declarative)
-        echo "Pipeline failed: ${e.getMessage()}"
-        currentBuild.result = 'FAILURE'
-        }
+            catch (Exception e) {
+            // Handle failure case (similar to `post { failure { } }` in declarative)
+            echo "Pipeline failed: ${e.getMessage()}"
+            currentBuild.result = 'FAILURE'
+            }
 
-        finally {
-        // This will always run, whether success or failure (like `post { always { } }`)
-        echo 'Pipeline finished!'
-    }
+            finally {
+            // This will always run, whether success or failure (like `post { always { } }`)
+            echo 'Pipeline finished!'
+        }
+    }  // End of dir
 }
 }
 }
