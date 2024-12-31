@@ -64,10 +64,10 @@ podTemplate(
                         echo ${PASSWORD} | cosign login ${registry} -u ${USERNAME} --password-stdin 
                         COSIGN_PASSWORD="" cosign sign --key $COSIGN_PRIVATE_KEY ${registry}/${image_repository}/${imageName}:${imageTag} -y
                         """
-                    echo 'Verifying Image signature...'
-                    sh """
-                    COSIGN_PASSWORD="" cosign verify --key $COSIGN_PUBLIC_KEY ${registry}/${image_repository}/${imageName}:${imageTag}
-                    """
+                        echo 'Verifying Image signature...'
+                        sh """
+                        COSIGN_PASSWORD="" cosign verify --key $COSIGN_PUBLIC_KEY ${registry}/${image_repository}/${imageName}:${imageTag}
+                        """
                     }
                     }
                     }  // End of withCredentials
