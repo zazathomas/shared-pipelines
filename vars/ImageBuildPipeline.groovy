@@ -19,60 +19,62 @@ podTemplate(
 )
 {
     node(POD_LABEL) {
-        try {
-            stage('Git Clone') {
-                echo 'Cloning Repository...'
-                git branch: 'main', url: giturl
-            }
-            stage("Build Image") {
-                container('kaniko') {
-                    echo "Logging into ${registry} registry..."
-                    // Use Jenkins credentials to create `config.json`
-                    withCredentials([usernamePassword(credentialsId: credentialsId, usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+        dir('workspace') {
+            try {
+                stage('Git Clone') {
+                    echo 'Cloning Repository...'
+                    git branch: 'main', url: giturl
+                }
+                stage("Build Image") {
+                    container('kaniko') {
+                        echo "Logging into ${registry} registry..."
+                        // Use Jenkins credentials to create `config.json`
+                        withCredentials([usernamePassword(credentialsId: credentialsId, usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                            sh """
+                                echo '{"auths": {"https://${registry}": {"username": "$USERNAME", "password": "$PASSWORD"}}}' > /kaniko/.docker/config.json
+                            """
+                        }  // End of withCredentials
+                        echo 'Building Image using Kaniko...'
                         sh """
-                            echo '{"auths": {"https://${registry}": {"username": "$USERNAME", "password": "$PASSWORD"}}}' > /kaniko/.docker/config.json
+                        /kaniko/executor \
+                        --context ${kanikoContext} \
+                        --dockerfile ${kanikoDockerfile} \
+                        --destination ${registry}/${image_repository}/${imageName}:${imageTag} \
+                        --destination ${registry}/${image_repository}/${imageName}:latest \
+                        --cache=true \
+                        --skip-tls-verify=true
                         """
-                    }  // End of withCredentials
-                    echo 'Building Image using Kaniko...'
-                    sh """
-                    /kaniko/executor \
-                    --context ${kanikoContext} \
-                    --dockerfile ${kanikoDockerfile} \
-                    --destination ${registry}/${image_repository}/${imageName}:${imageTag} \
-                    --destination ${registry}/${image_repository}/${imageName}:latest \
-                    --cache=true \
-                    --skip-tls-verify=true
-                    """
-                }  // End of container 'kaniko'
+                    }  // End of container 'kaniko'
+                }
+                stage("Sign & Verify Image with Cosign") {
+                    container('cosign') {
+                        echo 'Signing Image...'
+                        withCredentials([file(credentialsId: "cosign-private-key", variable: 'COSIGN_PRIVATE_KEY')]) {
+                        withCredentials([file(credentialsId: "cosign-public-key", variable: 'COSIGN_PUBLIC_KEY')]) {
+                        withCredentials([usernamePassword(credentialsId: credentialsId, usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
+                            sh """
+                            echo ${PASSWORD} | cosign login ${registry} -u ${USERNAME} --password-stdin 
+                            COSIGN_PASSWORD="" cosign sign --key $COSIGN_PRIVATE_KEY ${registry}/${image_repository}/${imageName}:${imageTag} -y
+                            """
+                            echo 'Verifying Image signature...'
+                            sh """
+                            COSIGN_PASSWORD="" cosign verify --key $COSIGN_PUBLIC_KEY ${registry}/${image_repository}/${imageName}:${imageTag}
+                            """
+                        }
+                        }
+                        }  // End of withCredentials
+                    }  // End of container 'cosign'
+                }
+            }  // End of try
+            catch (Exception e) {
+                echo "Pipeline failed: ${e.getMessage()}"
+                currentBuild.result = 'FAILURE'
+            } 
+            
+            finally {
+                echo 'Pipeline finished!'
             }
-            stage("Sign Image") {
-                container('cosign') {
-                    echo 'Signing Image...'
-                    withCredentials([file(credentialsId: "cosign-private-key", variable: 'COSIGN_PRIVATE_KEY')]) {
-                    withCredentials([file(credentialsId: "cosign-public-key", variable: 'COSIGN_PUBLIC_KEY')]) {
-                    withCredentials([usernamePassword(credentialsId: credentialsId, usernameVariable: 'USERNAME', passwordVariable: 'PASSWORD')]) {
-                        sh """
-                        echo ${PASSWORD} | cosign login ${registry} -u ${USERNAME} --password-stdin 
-                        COSIGN_PASSWORD="" cosign sign --key $COSIGN_PRIVATE_KEY ${registry}/${image_repository}/${imageName}:${imageTag} -y
-                        """
-                    echo 'Verifying Image signature...'
-                    sh """
-                    COSIGN_PASSWORD="" cosign verify --key $COSIGN_PUBLIC_KEY ${registry}/${image_repository}/${imageName}:${imageTag}
-                    """
-                    }
-                    }
-                    }  // End of withCredentials
-                }  // End of container 'cosign'
-            }
-        }  // End of try
-        catch (Exception e) {
-            echo "Pipeline failed: ${e.getMessage()}"
-            currentBuild.result = 'FAILURE'
-        } 
-        
-        finally {
-            echo 'Pipeline finished!'
-        }
+        }  // End of dir    
     }  // End of node
 }
-}
+} // End of call
